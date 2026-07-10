@@ -25,6 +25,12 @@ jobs:
           - os: ubuntu-latest
             asset_name: llama-tune-linux-x86_64
             built_name: llama-tune
+          - os: macos-latest
+            asset_name: llama-tune-macos-arm64
+            built_name: llama-tune
+          - os: macos-13
+            asset_name: llama-tune-macos-x86_64
+            built_name: llama-tune
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
