@@ -1,0 +1,50 @@
+[package]
+name = "llama-tune"
+version = "0.1.0"
+edition = "2021"
+description = "Optimal llama.cpp parameter calculator with hardware detection and model recommendations"
+
+[dependencies]
+# TUI
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client for HuggingFace API
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures-util = "0.3"
+
+# System info (CPU, RAM). No GPU support in this crate; GPU detection is handled
+# separately (NVML for NVIDIA, sysctl fallback for Apple Silicon — see hardware.rs).
+sysinfo = "0.32"
+
+# NVIDIA GPU VRAM detection (gracefully degrades if NVML absent)
+nvml-wrapper = { version = "0.10", optional = true }
+
+# Error handling
+anyhow = "1"
+
+# Byte formatting
+bytesize = "1"
+
+# Home/cache directory resolution (for locating the Hugging Face hub cache)
+dirs = "6"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["nvidia"]
+nvidia = ["nvml-wrapper"]
+
+# DXGI-based cross-vendor (AMD/Intel/NVIDIA fallback) GPU VRAM detection on Windows.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Foundation"] }
+
+[[bin]]
+name = "llama-tune"
+path = "src/main.rs"
