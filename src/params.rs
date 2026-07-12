@@ -212,6 +212,24 @@ fn compute_gpu_layers(
     rationale: &mut Vec<String>,
 ) -> i32 {
     let vram = hw.primary_vram_bytes();
+    // Integrated GPUs report a driver-advertised ceiling (e.g. DXGI's
+    // SharedSystemMemory, typically ~50% of total RAM) rather than a real
+    // measurement of what's free right now — that memory is the same pool
+    // the OS and llama.cpp's own CPU-side buffers draw from. Cap it by what's
+    // actually available so offload estimates don't starve the rest of the
+    // system on a RAM-constrained machine.
+    let vram = if hw.has_dedicated_gpu() {
+        vram
+    } else if vram > hw.available_ram_bytes {
+        rationale.push(format!(
+            "Shared GPU memory budget ({}) exceeds available RAM ({}) — capping to available RAM",
+            hw.vram_display(),
+            hw.available_ram_display()
+        ));
+        hw.available_ram_bytes
+    } else {
+        vram
+    };
     let bytes_per_layer = model.bytes_per_layer();
     rationale.push(format!(
         "Layer size estimated from {} quantization: ~{}MB/layer",
@@ -363,6 +381,30 @@ mod tests {
         let params = compute(&hw(1, true, 8), Some(&m));
         assert_eq!(params.n_gpu_layers, 0);
         assert!(!params.flash_attn);
+    }
+
+    #[test]
+    fn integrated_gpu_offload_capped_by_available_ram() {
+        // Shared GPU memory (8GB) comfortably fits the model, but only 1GB of
+        // RAM is actually available — the offload estimate should be capped
+        // to that, not the optimistic shared-memory ceiling.
+        let mut integrated = hw(8, false, 8);
+        integrated.available_ram_bytes = 1 * GB;
+        let m = model(4, 40, "Q4_K_M"); // 100MB/layer
+        let params = compute(&integrated, Some(&m));
+        assert!(params.n_gpu_layers > 0);
+        assert!(params.n_gpu_layers < 40);
+    }
+
+    #[test]
+    fn dedicated_gpu_offload_not_capped_by_available_ram() {
+        // A real discrete GPU's VRAM is independent of system RAM, so a low
+        // available-RAM figure shouldn't reduce its offload estimate.
+        let mut dedicated = hw(8, true, 8);
+        dedicated.available_ram_bytes = 1 * GB;
+        let m = model(4, 40, "Q4_K_M"); // 100MB/layer
+        let params = compute(&dedicated, Some(&m));
+        assert_eq!(params.n_gpu_layers, 40);
     }
 
     #[test]
